@@ -2,10 +2,16 @@ import { createAnthropic } from '@ai-sdk/anthropic'
 import { createOpenAI } from '@ai-sdk/openai'
 import { createGroq } from '@ai-sdk/groq'
 
-export function getModel() {
-  const provider = process.env.AI_PROVIDER ?? 'anthropic'
-  const apiKey   = process.env.AI_API_KEY
-  const modelId  = process.env.AI_MODEL
+export interface ModelConfig {
+  provider?: string
+  model?: string
+  apiKey?: string
+}
+
+export function getModel(config?: ModelConfig) {
+  const provider = config?.provider ?? process.env.AI_PROVIDER ?? 'anthropic'
+  const apiKey   = config?.apiKey ?? process.env.AI_API_KEY
+  const modelId  = config?.model ?? process.env.AI_MODEL
 
   switch (provider) {
     case 'openai': {

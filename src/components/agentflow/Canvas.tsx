@@ -15,8 +15,10 @@ import {
 import { useFlowStore, NODE_DEFAULTS } from '@/store/useFlowStore'
 import { NODE_TYPES } from './constants'
 import FlowNode from './FlowNode'
+import FlowEdge from './FlowEdge'
 
 const nodeTypes = { flowNode: FlowNode }
+const edgeTypes = { flowEdge: FlowEdge }
 
 interface CanvasProps {
   onSelectNode: (id: string | null) => void
@@ -74,6 +76,7 @@ function CanvasFlow({ onSelectNode }: CanvasProps) {
       onEdgesChange={store.onEdgesChange}
       onConnect={onConnect}
       nodeTypes={nodeTypes}
+      edgeTypes={edgeTypes}
       onDrop={onDrop}
       onDragOver={onDragOver}
       onNodeClick={onNodeClick}
@@ -85,7 +88,7 @@ function CanvasFlow({ onSelectNode }: CanvasProps) {
       fitViewOptions={{ padding: 0.2 }}
       minZoom={0.1}
       maxZoom={2}
-      defaultEdgeOptions={{ type: 'smoothstep' }}
+      defaultEdgeOptions={{ type: 'flowEdge' }}
     >
       <Background
         variant={BackgroundVariant.Dots}

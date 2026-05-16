@@ -61,14 +61,14 @@ const INITIAL_NODES: Node<FlowNodeData>[] = ([
 ] as Node<FlowNodeData>[]).map(n => ({ ...n, data: { ...n.data, chips: computeChips(n.data.type, n.data as Record<string, unknown>) } }))
 
 const INITIAL_EDGES: Edge[] = [
-  { id: 'e1', source: 'n1', target: 'n2' },
-  { id: 'e2', source: 'n2', target: 'n3', label: 'web' },
-  { id: 'e3', source: 'n2', target: 'n4', label: 'code' },
-  { id: 'e4', source: 'n3', target: 'n5' },
-  { id: 'e5', source: 'n3', target: 'n6' },
-  { id: 'e6', source: 'n4', target: 'n6' },
-  { id: 'e7', source: 'n3', target: 'n7' },
-  { id: 'e8', source: 'n4', target: 'n7' },
+  { id: 'e1', type: 'flowEdge', source: 'n1', target: 'n2' },
+  { id: 'e2', type: 'flowEdge', source: 'n2', target: 'n3', label: 'web', data: { when: 'query contains URLs or "search"' } },
+  { id: 'e3', type: 'flowEdge', source: 'n2', target: 'n4', label: 'code', data: { when: 'query contains code or technical analysis' } },
+  { id: 'e4', type: 'flowEdge', source: 'n3', target: 'n5' },
+  { id: 'e5', type: 'flowEdge', source: 'n3', target: 'n6' },
+  { id: 'e6', type: 'flowEdge', source: 'n4', target: 'n6' },
+  { id: 'e7', type: 'flowEdge', source: 'n3', target: 'n7' },
+  { id: 'e8', type: 'flowEdge', source: 'n4', target: 'n7' },
 ]
 
 // ── Store interface ──────────────────────────────────────────
@@ -78,11 +78,21 @@ interface FlowStore {
   past: HistoryEntry[]
   future: HistoryEntry[]
 
+  // Design meta
+  designId: string | null
+  designName: string
+  isDirty: boolean
+  isSaving: boolean
+
   onNodesChange: (changes: NodeChange[]) => void
   onEdgesChange: (changes: EdgeChange[]) => void
   onConnect: (connection: Connection) => void
   addNode: (node: Node) => void
   updateNodeData: (id: string, patch: Record<string, unknown>) => void
+  loadDesign: (nodes: Node[], edges: Edge[], id: string, name: string) => void
+  setDesignName: (name: string) => void
+  setDirty: (dirty: boolean) => void
+  setSaving: (saving: boolean) => void
   setNodeStatus: (id: string, status: FlowNodeData['status']) => void
   setActiveEdges: (ids: Set<string>) => void
   undo: () => void
@@ -98,39 +108,63 @@ export const useFlowStore = create<FlowStore>((set) => ({
   edges: INITIAL_EDGES,
   past: [],
   future: [],
+  designId: null,
+  designName: 'Untitled design',
+  isDirty: false,
+  isSaving: false,
 
   onNodesChange: (changes) => set(state => {
     const shouldRecord = changes.some(c =>
       c.type === 'remove' ||
       (c.type === 'position' && (c as { type: 'position'; dragging?: boolean }).dragging === false)
     )
+    const hasStructuralChange = changes.some(c => c.type !== 'select' && c.type !== 'dimensions')
     return {
       nodes: applyNodeChanges(changes, state.nodes),
       past: shouldRecord ? [...state.past, snap(state)].slice(-MAX_HISTORY) : state.past,
       future: shouldRecord ? [] : state.future,
+      isDirty: hasStructuralChange ? true : state.isDirty,
     }
   }),
 
   onEdgesChange: (changes) => set(state => {
     const shouldRecord = changes.some(c => c.type === 'remove')
+    const hasStructuralChange = changes.some(c => c.type !== 'select')
     return {
       edges: applyEdgeChanges(changes, state.edges),
       past: shouldRecord ? [...state.past, snap(state)].slice(-MAX_HISTORY) : state.past,
       future: shouldRecord ? [] : state.future,
+      isDirty: hasStructuralChange ? true : state.isDirty,
     }
   }),
 
   onConnect: (connection) => set(state => ({
-    edges: addEdge({ ...connection, id: `e-${Date.now()}` }, state.edges),
+    edges: addEdge({ ...connection, id: `e-${Date.now()}`, type: 'flowEdge' }, state.edges),
     past: [...state.past, snap(state)].slice(-MAX_HISTORY),
     future: [],
+    isDirty: true,
   })),
 
   addNode: (node) => set(state => ({
     nodes: [...state.nodes, node],
     past: [...state.past, snap(state)].slice(-MAX_HISTORY),
     future: [],
+    isDirty: true,
   })),
+
+  loadDesign: (nodes, edges, id, name) => set({
+    nodes,
+    edges,
+    designId: id,
+    designName: name,
+    isDirty: false,
+    past: [],
+    future: [],
+  }),
+
+  setDesignName: (name) => set({ designName: name, isDirty: true }),
+  setDirty: (dirty) => set({ isDirty: dirty }),
+  setSaving: (saving) => set({ isSaving: saving }),
 
   updateNodeData: (id, patch) => set(state => ({
     nodes: state.nodes.map(n => {
@@ -138,6 +172,7 @@ export const useFlowStore = create<FlowStore>((set) => ({
       const d = { ...n.data, ...patch } as Record<string, unknown>
       return { ...n, data: { ...d, chips: computeChips(d.type as string, d) } }
     }),
+    isDirty: true,
   })),
 
   setNodeStatus: (id, status) => set(state => ({
