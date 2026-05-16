@@ -90,6 +90,7 @@ interface FlowStore {
   addNode: (node: Node) => void
   updateNodeData: (id: string, patch: Record<string, unknown>) => void
   loadDesign: (nodes: Node[], edges: Edge[], id: string, name: string) => void
+  resetDesign: () => void
   setDesignName: (name: string) => void
   setDirty: (dirty: boolean) => void
   setSaving: (saving: boolean) => void
@@ -158,6 +159,18 @@ export const useFlowStore = create<FlowStore>((set) => ({
     designId: id,
     designName: name,
     isDirty: false,
+    isSaving: false,
+    past: [],
+    future: [],
+  }),
+
+  resetDesign: () => set({
+    nodes: [],
+    edges: [],
+    designId: null,
+    designName: 'Untitled design',
+    isDirty: false,
+    isSaving: false,
     past: [],
     future: [],
   }),

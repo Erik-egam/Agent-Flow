@@ -92,7 +92,7 @@ function DesignCard({ design, onOpen, onDelete }: { design: DesignSummary; onOpe
 
 export default function DesignsPage() {
   const router = useRouter()
-  const { loadDesign } = useFlowStore()
+  const { loadDesign, resetDesign } = useFlowStore()
   const [designs, setDesigns] = useState<DesignSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -126,6 +126,7 @@ export default function DesignsPage() {
   }
 
   function newDesign() {
+    resetDesign()
     router.push('/editor')
   }
 

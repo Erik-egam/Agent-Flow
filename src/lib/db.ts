@@ -10,5 +10,6 @@ export function getDb(): Database.Database {
   const resolved = path.isAbsolute(filePath) ? filePath : path.join(process.cwd(), filePath)
   _db = new Database(resolved)
   _db.pragma('journal_mode = WAL')
+  _db.pragma('foreign_keys = OFF')
   return _db
 }

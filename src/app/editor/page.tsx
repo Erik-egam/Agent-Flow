@@ -16,7 +16,7 @@ export default function EditorPage() {
   const {
     nodes, edges, designId, designName, isDirty, isSaving,
     undo, redo,
-    setDesignName, setDirty, setSaving, loadDesign,
+    setDesignName, setDirty, setSaving, loadDesign, resetDesign,
   } = useFlowStore()
 
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -24,49 +24,88 @@ export default function EditorPage() {
   const [showSettings, setShowSettings] = useState(false)
 
   const importRef = useRef<HTMLInputElement>(null)
-  const lastSavedId = useRef<string | null>(designId)
+  const savedIdRef = useRef<string | null>(designId)
+  // Ref to always call the latest saveDesign from keyboard handlers
+  const saveDesignRef = useRef<(onlyIfDirty?: boolean) => Promise<void>>(() => Promise.resolve())
 
-  // Keyboard shortcuts
+  // Keep savedIdRef in sync with designId (set via loadDesign)
+  useEffect(() => {
+    if (designId) savedIdRef.current = designId
+  }, [designId])
+
+  // Mark dirty on mount if not loaded from DB (no designId)
+  useEffect(() => {
+    if (!designId && nodes.length > 0) setDirty(true)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Keyboard shortcuts — use ref so the handler always sees the latest saveDesign
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       const mod = e.ctrlKey || e.metaKey
       if (!mod) return
       if (e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo() }
       else if (e.key === 'y' || (e.key === 'z' && e.shiftKey)) { e.preventDefault(); redo() }
-      else if (e.key === 's') { e.preventDefault(); saveDesign() }
+      else if (e.key === 's') { e.preventDefault(); saveDesignRef.current(false) }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [undo, redo, isDirty, nodes, edges, designId, designName])
+  }, [undo, redo])
 
-  // Auto-save every 30s
+  // Auto-save every 30s when dirty
   useEffect(() => {
-    const id = setInterval(() => { if (isDirty) saveDesign() }, AUTOSAVE_INTERVAL)
+    const id = setInterval(() => { if (isDirty) saveDesign(true) }, AUTOSAVE_INTERVAL)
     return () => clearInterval(id)
-  }, [isDirty, nodes, edges, designId, designName])
+  }, [isDirty]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function saveDesign() {
-    if (!isDirty) return
+  async function saveDesign(onlyIfDirty = true) {
+    if (onlyIfDirty && !isDirty) return
+    if (isSaving) return
+    if (nodes.length === 0) return  // nothing to save on empty canvas
     setSaving(true)
     try {
-      const currentId = lastSavedId.current ?? designId
+      const currentId = savedIdRef.current
       const design = serialize(nodes, edges, designName, currentId ?? undefined)
       const isNew = !currentId
+
       const res = await fetch(isNew ? '/api/designs' : `/api/designs/${currentId}`, {
         method: isNew ? 'POST' : 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ design }),
       })
+
       if (res.ok) {
         const data = await res.json() as { id: string }
-        lastSavedId.current = data.id
-        setDirty(false)
+        savedIdRef.current = data.id
+        // Update store designId if it was a new design
+        if (isNew) loadDesign(nodes, edges, data.id, designName)
+        else setDirty(false)
+      } else {
+        const err = await res.json() as { error?: string }
+        console.error('[AgentFlow] Save failed:', err.error)
       }
-    } finally { setSaving(false) }
+    } catch (err) {
+      console.error('[AgentFlow] Save error:', err)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Keep ref in sync on every render so keyboard handler always calls latest version
+  saveDesignRef.current = saveDesign
+
+  function handleNew() {
+    if (isDirty) {
+      const ok = confirm('Discard unsaved changes and start a new design?')
+      if (!ok) return
+    }
+    savedIdRef.current = null
+    resetDesign()
+    setSelectedId(null)
+    setShowDebugger(false)
   }
 
   function handleExport() {
-    const design = serialize(nodes, edges, designName, designId ?? undefined)
+    const design = serialize(nodes, edges, designName, savedIdRef.current ?? undefined)
     const blob = new Blob([JSON.stringify(design, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -86,7 +125,7 @@ export default function EditorPage() {
       if (!validation.success) { alert(`Invalid file: ${validation.error}`); return }
       const { nodes: n, edges: ed } = deserialize(validation.data)
       loadDesign(n, ed, validation.data.id, validation.data.name)
-      lastSavedId.current = validation.data.id
+      savedIdRef.current = validation.data.id
     } catch { alert('Could not parse the file.') }
     e.target.value = ''
   }
@@ -95,10 +134,12 @@ export default function EditorPage() {
     <div className="af-screen">
       <Toolbar
         name={designName}
-        dirty={isDirty}
+        dirty={isDirty && nodes.length > 0}
         saving={isSaving}
         runState={showDebugger ? 'running' : 'idle'}
         onRun={() => setShowDebugger(s => !s)}
+        onSave={() => saveDesign(false)}
+        onNew={handleNew}
         onExport={handleExport}
         onImport={() => importRef.current?.click()}
         onSettings={() => setShowSettings(true)}

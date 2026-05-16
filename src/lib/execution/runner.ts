@@ -97,18 +97,20 @@ export async function runDesign(config: RunConfig): Promise<string> {
   const runId = generateRunId()
   createRun(runId)
 
-  // Save initial run record to SQLite (best-effort)
-  try {
-    const db = getDb()
-    db.prepare(
-      `INSERT INTO ExecutionRun (id, designId, input, status, events, createdAt, updatedAt)
-       VALUES (?, ?, ?, 'running', '[]', datetime('now'), datetime('now'))`
-    ).run(runId, config.designId ?? 'none', String(config.input ?? '').slice(0, 2000))
-  } catch (sqlErr) {
-    console.warn('[AgentFlow] SQLite insert failed, run will not be persisted:', sqlErr)
+  // Save initial run record to SQLite — only if design is already persisted
+  if (config.designId) {
+    try {
+      const db = getDb()
+      db.prepare(
+        `INSERT INTO ExecutionRun (id, designId, input, status, events, createdAt, updatedAt)
+         VALUES (?, ?, ?, 'running', '[]', datetime('now'), datetime('now'))`
+      ).run(runId, config.designId, String(config.input ?? '').slice(0, 2000))
+    } catch (sqlErr) {
+      console.warn('[AgentFlow] Could not persist run:', sqlErr)
+    }
   }
 
-  // Fire & forget execution
+  // Fire & forget execution (pass full config so designId is available for persistence)
   executeGraph(runId, config).catch(err => {
     console.error('[AgentFlow] Execution error:', err)
     pushEvent(runId, {
@@ -212,11 +214,13 @@ async function executeGraph(runId: string, config: RunConfig) {
   pushEvent(runId, doneEvt)
   allEvents.push(doneEvt)
 
-  // Persist completed run (best-effort)
-  try {
-    const db = getDb()
-    db.prepare(
-      `UPDATE ExecutionRun SET status='completed', events=?, updatedAt=datetime('now') WHERE id=?`
-    ).run(JSON.stringify(allEvents), runId)
-  } catch { /* ignore */ }
+  // Persist completed run (only if design was saved)
+  if (config.designId) {
+    try {
+      const db = getDb()
+      db.prepare(
+        `UPDATE ExecutionRun SET status='completed', events=?, updatedAt=datetime('now') WHERE id=?`
+      ).run(JSON.stringify(allEvents), runId)
+    } catch { /* ignore */ }
+  }
 }
