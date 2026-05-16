@@ -1,0 +1,32 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Design {
+  id          String         @id @default(uuid())
+  name        String
+  description String?
+  framework   String         @default("langgraph")
+  data        String         // JSON serializado del diseño completo
+  thumbnail   String?        // Base64 PNG del canvas
+  tags        String         @default("[]") // JSON array serializado
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  runs        ExecutionRun[]
+}
+
+model ExecutionRun {
+  id        String   @id @default(uuid())
+  designId  String
+  design    Design   @relation(fields: [designId], references: [id], onDelete: Cascade)
+  input     String   // JSON del input de prueba
+  status    String   @default("pending") // pending | running | completed | failed
+  events    String   @default("[]") // JSON array de eventos SSE
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
