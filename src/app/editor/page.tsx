@@ -6,16 +6,14 @@ import NodePalette from '@/components/agentflow/NodePalette'
 import Canvas from '@/components/agentflow/Canvas'
 import PropertiesPanel from '@/components/agentflow/PropertiesPanel'
 import ExecutionDebugger from '@/components/agentflow/ExecutionDebugger'
-import { useFlowStore, type FlowNodeData } from '@/store/useFlowStore'
+import { useFlowStore } from '@/store/useFlowStore'
 
 export default function EditorPage() {
-  const { nodes, undo, redo, setNodeStatus, setActiveEdges } = useFlowStore()
+  const { undo, redo, setNodeStatus, setActiveEdges } = useFlowStore()
 
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [showDebugger, setShowDebugger] = useState(false)
   const [runState, setRunState] = useState<'idle' | 'running'>('idle')
-  const [activePromptTab, setActivePromptTab] = useState<'config' | 'prompt' | 'conn'>('config')
-  const [showGenerateDrawer, setShowGenerateDrawer] = useState(false)
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -33,38 +31,20 @@ export default function EditorPage() {
     setRunState(next)
     setShowDebugger(next === 'running')
     if (next === 'running') {
-      setNodeStatus('n1', 'ok')
-      setNodeStatus('n2', 'ok')
-      setNodeStatus('n3', 'run')
-      setNodeStatus('n4', 'idle')
-      setNodeStatus('n5', 'ok')
-      setNodeStatus('n6', 'idle')
-      setNodeStatus('n7', 'idle')
+      setNodeStatus('n1', 'ok'); setNodeStatus('n2', 'ok'); setNodeStatus('n3', 'run')
+      setNodeStatus('n4', 'idle'); setNodeStatus('n5', 'ok'); setNodeStatus('n6', 'idle'); setNodeStatus('n7', 'idle')
       setActiveEdges(new Set(['e1', 'e2', 'e4']))
     } else {
-      ;['n1', 'n2', 'n3', 'n4', 'n5', 'n6', 'n7'].forEach(id => setNodeStatus(id, 'idle'))
+      ;['n1','n2','n3','n4','n5','n6','n7'].forEach(id => setNodeStatus(id, 'idle'))
       setActiveEdges(new Set())
     }
   }
 
   function stopRun() {
-    setShowDebugger(false)
-    setRunState('idle')
-    ;['n1', 'n2', 'n3', 'n4', 'n5', 'n6', 'n7'].forEach(id => setNodeStatus(id, 'idle'))
+    setShowDebugger(false); setRunState('idle')
+    ;['n1','n2','n3','n4','n5','n6','n7'].forEach(id => setNodeStatus(id, 'idle'))
     setActiveEdges(new Set())
   }
-
-  const selectedNode = selectedId ? nodes.find(n => n.id === selectedId) : null
-  const selectedNodeData = selectedNode
-    ? {
-        id: selectedNode.id,
-        type: (selectedNode.data as FlowNodeData).type,
-        name: (selectedNode.data as FlowNodeData).name,
-        chips: (selectedNode.data as FlowNodeData).chips,
-        x: selectedNode.position.x,
-        y: selectedNode.position.y,
-      }
-    : null
 
   return (
     <div className="af-screen">
@@ -74,16 +54,8 @@ export default function EditorPage() {
         <Canvas onSelectNode={setSelectedId}>
           {showDebugger && <ExecutionDebugger onClose={stopRun} />}
         </Canvas>
-        {selectedNodeData && (
-          <PropertiesPanel
-            node={selectedNodeData}
-            onClose={() => setSelectedId(null)}
-            activeTab={activePromptTab}
-            onTabChange={setActivePromptTab}
-            onShowGenerateDrawer={() => setShowGenerateDrawer(true)}
-            showGenerateDrawer={showGenerateDrawer}
-            onCloseDrawer={() => setShowGenerateDrawer(false)}
-          />
+        {selectedId && (
+          <PropertiesPanel nodeId={selectedId} onClose={() => setSelectedId(null)} />
         )}
       </div>
     </div>

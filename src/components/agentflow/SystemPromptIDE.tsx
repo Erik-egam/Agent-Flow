@@ -1,270 +1,304 @@
 'use client'
 
+import { useState, useRef, useCallback } from 'react'
+import dynamic from 'next/dynamic'
 import Icon from './Icon'
+import { NODE_TYPES } from './constants'
+
+const MonacoEditor = dynamic(() => import('@monaco-editor/react'), { ssr: false })
 
 interface SystemPromptIDEProps {
-  nodeName?: string
-  nodeType?: string
-  activeTab: 'config' | 'prompt' | 'conn'
-  onTabChange: (tab: 'config' | 'prompt' | 'conn') => void
-  onShowGenerateDrawer?: () => void
+  nodeId: string
+  nodeName: string
+  nodeType: string
+  systemPrompt: string
+  onPromptChange: (value: string) => void
+  onTabChange: (tab: 'config' | 'prompt') => void
 }
 
-// Syntax-highlighted prompt lines
-const PROMPT_LINES: Array<{ segs: Array<{ text: string; color: string }> }> = [
-  { segs: [{ text: '# Research Router System Prompt', color: '#6a9955' }] },
-  { segs: [{ text: '', color: '' }] },
-  { segs: [{ text: 'You are ', color: '#d4d4d4' }, { text: '{{agent_name}}', color: '#fbbf24' }, { text: ', an intelligent orchestrator', color: '#d4d4d4' }] },
-  { segs: [{ text: 'that routes research tasks to specialized sub-agents.', color: '#d4d4d4' }] },
-  { segs: [{ text: '', color: '' }] },
-  { segs: [{ text: '## Context', color: '#569cd6' }] },
-  { segs: [{ text: '- Session ID: ', color: '#d4d4d4' }, { text: '{{session_id}}', color: '#fbbf24' }] },
-  { segs: [{ text: '- Available agents: ', color: '#d4d4d4' }, { text: '{{available_agents}}', color: '#fbbf24' }] },
-  { segs: [{ text: '- Max parallel tasks: ', color: '#d4d4d4' }, { text: '{{max_parallel}}', color: '#fbbf24' }] },
-  { segs: [{ text: '', color: '' }] },
-  { segs: [{ text: '## Routing Rules', color: '#569cd6' }] },
-  { segs: [{ text: '1. Analyze the user query carefully', color: '#d4d4d4' }] },
-  { segs: [{ text: '2. Determine which agent(s) are best suited', color: '#d4d4d4' }] },
-  { segs: [{ text: '3. For web content → route to Web Researcher', color: '#d4d4d4' }] },
-  { segs: [{ text: '4. For code analysis → route to Code Analyst', color: '#d4d4d4' }] },
-  { segs: [{ text: '5. Combine outputs coherently', color: '#d4d4d4' }] },
-  { segs: [{ text: '', color: '' }] },
-  { segs: [{ text: '## Output Format', color: '#569cd6' }] },
-  { segs: [{ text: 'Return a JSON routing plan:', color: '#d4d4d4' }] },
-  { segs: [{ text: '```json', color: '#808080' }] },
-  { segs: [{ text: '{', color: '#ffd700' }] },
-  { segs: [{ text: '  "route": ', color: '#9cdcfe' }, { text: '"web" | "code" | "both"', color: '#ce9178' }, { text: ',', color: '#d4d4d4' }] },
-  { segs: [{ text: '  "reason": ', color: '#9cdcfe' }, { text: '"string"', color: '#ce9178' }, { text: ',', color: '#d4d4d4' }] },
-  { segs: [{ text: '  "priority": ', color: '#9cdcfe' }, { text: '"high" | "normal"', color: '#ce9178' }] },
-  { segs: [{ text: '}', color: '#ffd700' }] },
-  { segs: [{ text: '```', color: '#808080' }] },
-]
+// ── Generate Drawer ──────────────────────────────────────────
 
-const TEMPLATE_VARS = ['{{agent_name}}', '{{session_id}}', '{{available_agents}}', '{{max_parallel}}']
+interface GenerateDrawerProps {
+  nodeName: string
+  onClose: () => void
+  onResult: (text: string) => void
+}
 
-export default function SystemPromptIDE({
-  nodeName = 'Research Router',
-  activeTab,
-  onTabChange,
-  onShowGenerateDrawer,
-}: SystemPromptIDEProps) {
+function GenerateDrawer({ nodeName, onClose, onResult }: GenerateDrawerProps) {
+  const [role, setRole] = useState(`${nodeName} AI agent`)
+  const [context, setContext] = useState('')
+  const [constraints, setConstraints] = useState<string[]>([])
+  const [tagInput, setTagInput] = useState('')
+  const [outputFormat, setOutputFormat] = useState('text')
+  const [style, setStyle] = useState('precise')
+  const [fewShot, setFewShot] = useState('')
+  const [showFewShot, setShowFewShot] = useState(false)
+  const [showAdvanced, setShowAdvanced] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  function addTag(e: React.KeyboardEvent) {
+    if (e.key === 'Enter' && tagInput.trim()) {
+      setConstraints(prev => [...prev, tagInput.trim()])
+      setTagInput('')
+    }
+  }
+
+  async function generate() {
+    setLoading(true)
+    setError('')
+    try {
+      const res = await fetch('/api/ai/prompt/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role, context, constraints, outputFormat, style, fewShot }),
+      })
+      const data = await res.json() as { text?: string; error?: string }
+      if (data.error) { setError(data.error); return }
+      onResult(data.text ?? '')
+      onClose()
+    } catch {
+      setError('Network error — check your AI_API_KEY in .env.local')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
-    <div
-      style={{
-        width: 640,
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100%',
-        background: 'var(--surface-1)',
-        borderLeft: '1px solid var(--border)',
-        flexShrink: 0,
-      }}
-    >
-      {/* Panel header */}
+    <div style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: 440, background: 'var(--surface-1)', borderLeft: '1px solid var(--border-strong)', display: 'flex', flexDirection: 'column', zIndex: 50, boxShadow: '-8px 0 32px rgba(0,0,0,0.5)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: '1px solid var(--border)' }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--indigo-dim)', display: 'grid', placeItems: 'center', color: 'var(--indigo-2)' }}>
+            <Icon name="sparkles" size={16} />
+          </div>
+          <div>
+            <div style={{ fontWeight: 600, fontSize: 13 }}>Generate System Prompt</div>
+            <div style={{ fontSize: 11.5, color: 'var(--text-3)' }}>AI writes the optimal prompt for you</div>
+          </div>
+        </div>
+        <button className="af-btn af-btn-ghost" onClick={onClose}><Icon name="x" size={14} /></button>
+      </div>
+
+      <div style={{ flex: '1 1 auto', overflowY: 'auto', padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div className="af-field">
+          <label className="af-label">Agent role *</label>
+          <input className="af-input" value={role} onChange={e => setRole(e.target.value)} placeholder="e.g. Research orchestrator that routes tasks…" />
+        </div>
+        <div className="af-field">
+          <label className="af-label">Context & background</label>
+          <textarea className="af-textarea" style={{ minHeight: 72 }} value={context} onChange={e => setContext(e.target.value)} placeholder="What system is this agent part of? What does it know?" />
+        </div>
+        <div className="af-field">
+          <label className="af-label">Constraints & behavior</label>
+          <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border-strong)', borderRadius: 6, padding: '6px 8px', display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+            {constraints.map(t => (
+              <div key={t} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 7px', background: 'var(--surface-3)', border: '1px solid var(--border)', borderRadius: 4, fontSize: 11.5, color: 'var(--text-2)' }}>
+                {t}
+                <button onClick={() => setConstraints(c => c.filter(x => x !== t))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-4)', padding: 0, display: 'flex' }}>
+                  <Icon name="x" size={10} />
+                </button>
+              </div>
+            ))}
+            <input value={tagInput} onChange={e => setTagInput(e.target.value)} onKeyDown={addTag} placeholder="Add constraint + Enter…" style={{ background: 'none', border: 'none', outline: 'none', fontSize: 11.5, color: 'var(--text)', fontFamily: 'var(--font-ui)', minWidth: 100 }} />
+          </div>
+        </div>
+        <div className="af-field">
+          <label className="af-label">Output format</label>
+          <select className="af-select" value={outputFormat} onChange={e => setOutputFormat(e.target.value)}>
+            <option value="text">Plain text</option>
+            <option value="json">JSON — structured response</option>
+            <option value="markdown">Markdown</option>
+          </select>
+        </div>
+
+        <button onClick={() => setShowFewShot(s => !s)} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', fontSize: 11.5, fontFamily: 'var(--font-ui)', padding: '4px 0' }}>
+          <Icon name={showFewShot ? 'chevron-down' : 'chevron-right'} size={11} />
+          Few-shot examples <span style={{ padding: '1px 5px', background: 'var(--surface-3)', border: '1px solid var(--border)', borderRadius: 3, fontSize: 10, color: 'var(--text-4)' }}>optional</span>
+        </button>
+        {showFewShot && (
+          <textarea className="af-textarea" style={{ minHeight: 72 }} value={fewShot} onChange={e => setFewShot(e.target.value)} placeholder={'User: "search for X"\nAssistant: { "route": "web" }'} />
+        )}
+
+        <button onClick={() => setShowAdvanced(s => !s)} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', fontSize: 11.5, fontFamily: 'var(--font-ui)', padding: '4px 0' }}>
+          <Icon name={showAdvanced ? 'chevron-down' : 'chevron-right'} size={11} />
+          Advanced options
+        </button>
+        {showAdvanced && (
+          <div className="af-field" style={{ marginBottom: 0 }}>
+            <label className="af-label">Writing style</label>
+            <select className="af-select" value={style} onChange={e => setStyle(e.target.value)}>
+              <option value="precise">Precise & technical</option>
+              <option value="friendly">Friendly & conversational</option>
+              <option value="concise">Concise</option>
+            </select>
+          </div>
+        )}
+
+        {error && (
+          <div style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 6, padding: '8px 12px', fontSize: 12, color: '#fca5a5' }}>
+            {error}
+          </div>
+        )}
+      </div>
+
+      <div style={{ padding: '12px 18px', borderTop: '1px solid var(--border)', display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: 'var(--text-4)', fontSize: 11, marginRight: 'auto' }}>
+          <Icon name="sparkles" size={11} />
+          <span style={{ fontFamily: 'var(--font-mono)' }}>AI_MODEL</span>
+        </div>
+        <button className="af-btn" onClick={onClose}>Cancel</button>
+        <button className="af-btn af-btn-primary" style={{ gap: 7 }} onClick={generate} disabled={loading}>
+          {loading ? <><Icon name="loader" size={12} />Generating…</> : <><Icon name="sparkles" size={12} />Generate</>}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Refine bar ───────────────────────────────────────────────
+
+interface RefineBarProps {
+  onRefine: (instruction: string) => void
+  onClose: () => void
+  loading: boolean
+}
+
+function RefineBar({ onRefine, onClose, loading }: RefineBarProps) {
+  const [instruction, setInstruction] = useState('')
+  return (
+    <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', background: 'rgba(139,92,246,0.08)', display: 'flex', gap: 8, alignItems: 'center' }}>
+      <span style={{ color: '#a78bfa', display: 'flex' }}><Icon name="wand" size={13} /></span>
+      <input className="af-input" style={{ flex: 1, height: 28, fontSize: 12, borderColor: 'rgba(139,92,246,0.3)' }}
+        value={instruction} onChange={e => setInstruction(e.target.value)}
+        placeholder="Refinement instruction (e.g. 'Make it more concise')"
+        onKeyDown={e => { if (e.key === 'Enter' && instruction.trim()) onRefine(instruction) }}
+        autoFocus />
+      <button className="af-btn" style={{ fontSize: 11, height: 28, background: 'rgba(139,92,246,0.15)', borderColor: 'rgba(139,92,246,0.3)', color: '#a78bfa' }}
+        onClick={() => instruction.trim() && onRefine(instruction)} disabled={loading}>
+        {loading ? 'Refining…' : 'Refine'}
+      </button>
+      <button className="af-btn af-btn-ghost" style={{ height: 28, padding: '4px 7px' }} onClick={onClose}>
+        <Icon name="x" size={12} />
+      </button>
+    </div>
+  )
+}
+
+// ── SystemPromptIDE ──────────────────────────────────────────
+
+export default function SystemPromptIDE({ nodeId, nodeName, nodeType, systemPrompt, onPromptChange, onTabChange }: SystemPromptIDEProps) {
+  const nt = NODE_TYPES[nodeType]
+  const [showGenDrawer, setShowGenDrawer] = useState(false)
+  const [showRefineBar, setShowRefineBar] = useState(false)
+  const [refining, setRefining] = useState(false)
+  const editorRef = useRef<unknown>(null)
+
+  const handleEditorMount = useCallback((editor: unknown) => {
+    editorRef.current = editor
+  }, [])
+
+  async function handleRefine(instruction: string) {
+    setRefining(true)
+    try {
+      const res = await fetch('/api/ai/prompt/refine', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPrompt: systemPrompt, instruction }),
+      })
+      const data = await res.json() as { text?: string; error?: string }
+      if (data.text) { onPromptChange(data.text); setShowRefineBar(false) }
+    } finally {
+      setRefining(false)
+    }
+  }
+
+  function copyPrompt() {
+    if (systemPrompt) navigator.clipboard.writeText(systemPrompt)
+  }
+
+  return (
+    <div style={{ width: 640, display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--surface-1)', borderLeft: '1px solid var(--border)', flexShrink: 0, position: 'relative' }}>
+      {/* Header */}
       <div className="af-panel-header" style={{ justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div
-            style={{
-              width: 18,
-              height: 18,
-              borderRadius: 4,
-              background: 'color-mix(in srgb, var(--c-orchestrator) 15%, transparent)',
-              color: 'var(--c-orchestrator)',
-              display: 'grid',
-              placeItems: 'center',
-            }}
-          >
-            <Icon name="sitemap" size={11} sw={1.8} />
+          <div style={{ width: 18, height: 18, borderRadius: 4, background: `color-mix(in srgb, ${nt?.color ?? 'var(--indigo)'} 15%, transparent)`, color: nt?.color ?? 'var(--indigo)', display: 'grid', placeItems: 'center' }}>
+            <Icon name={nt?.icon ?? 'cpu'} size={11} sw={1.8} />
           </div>
           <span style={{ color: 'var(--text-3)' }}>{nodeName}</span>
           <span style={{ color: 'var(--text-4)' }}>—</span>
           <span>System Prompt</span>
         </div>
-        <div className="af-badge af-badge-ai">
-          <Icon name="sparkles" size={9} />
-          AI
-        </div>
+        <div className="af-badge af-badge-ai"><Icon name="sparkles" size={9} />AI</div>
       </div>
 
       {/* Tabs */}
       <div className="af-prop-tabs">
-        {(['config', 'prompt', 'conn'] as const).map(tab => (
-          <button
-            key={tab}
-            className={`af-prop-tab${activeTab === tab ? ' is-active' : ''}`}
-            onClick={() => onTabChange(tab)}
-          >
-            {tab === 'config' ? 'Config' : tab === 'prompt' ? 'Prompt' : 'Connections'}
-          </button>
-        ))}
+        <button className="af-prop-tab" onClick={() => onTabChange('config')}>Config</button>
+        <button className="af-prop-tab is-active">Prompt IDE</button>
       </div>
 
-      {/* IDE toolbar */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          padding: '6px 12px',
-          borderBottom: '1px solid var(--border)',
-          background: 'var(--surface-2)',
-        }}
-      >
-        <button
-          className="af-btn af-btn-primary"
-          style={{ fontSize: 11, height: 26, gap: 5 }}
-          onClick={onShowGenerateDrawer}
-        >
-          <Icon name="sparkles" size={11} />
-          Generate
+      {/* IDE Toolbar */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderBottom: '1px solid var(--border)', background: 'var(--surface-2)' }}>
+        <button className="af-btn af-btn-primary" style={{ fontSize: 11, height: 26, gap: 5 }} onClick={() => { setShowGenDrawer(true); setShowRefineBar(false) }}>
+          <Icon name="sparkles" size={11} />Generate
         </button>
-        <button className="af-btn" style={{ fontSize: 11, height: 26, gap: 5, background: 'rgba(139,92,246,0.15)', borderColor: 'rgba(139,92,246,0.3)', color: '#a78bfa' }}>
-          <Icon name="wand" size={11} />
-          Refine
+        <button className="af-btn" style={{ fontSize: 11, height: 26, gap: 5, background: 'rgba(139,92,246,0.15)', borderColor: 'rgba(139,92,246,0.3)', color: '#a78bfa' }}
+          onClick={() => { setShowRefineBar(s => !s); setShowGenDrawer(false) }}>
+          <Icon name="wand" size={11} />Refine
         </button>
-        <button className="af-btn" style={{ fontSize: 11, height: 26, gap: 5 }}>
-          <Icon name="git-compare" size={11} />
-          View diff
-        </button>
-
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
-          <div className="af-badge af-badge-ai">
-            <Icon name="sparkles" size={9} />
-            AI-generated
-          </div>
-          <button className="af-btn-ghost af-btn" style={{ height: 26, padding: '4px 7px' }}>
-            <Icon name="copy" size={12} />
-          </button>
-          <button className="af-btn-ghost af-btn" style={{ height: 26, padding: '4px 7px' }}>
-            <Icon name="maximize" size={12} />
-          </button>
-        </div>
-      </div>
-
-      {/* Breadcrumb */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          padding: '4px 12px',
-          background: '#1e1e1e',
-          borderBottom: '1px solid #333',
-          fontFamily: 'var(--font-mono)',
-          fontSize: 11,
-          color: 'var(--text-3)',
-        }}
-      >
-        <span>research-pipeline.json</span>
-        <Icon name="chevron-right" size={10} />
-        <span>nodes</span>
-        <Icon name="chevron-right" size={10} />
-        <span>Research Router</span>
-        <Icon name="chevron-right" size={10} />
-        <span style={{ color: 'var(--text-2)' }}>system_prompt</span>
-      </div>
-
-      {/* Code editor */}
-      <div
-        style={{
-          flex: '1 1 auto',
-          overflowY: 'auto',
-          background: '#1e1e1e',
-          fontFamily: 'var(--font-mono)',
-          fontSize: 12,
-          lineHeight: '1.6',
-          padding: '12px 0',
-        }}
-      >
-        {PROMPT_LINES.map((line, lineNum) => (
-          <div
-            key={lineNum}
-            style={{
-              display: 'flex',
-              alignItems: 'flex-start',
-              paddingRight: 24,
-              minHeight: 19.2,
-            }}
-          >
-            {/* Line number */}
-            <span
-              style={{
-                width: 48,
-                textAlign: 'right',
-                paddingRight: 16,
-                color: '#555',
-                userSelect: 'none',
-                flexShrink: 0,
-              }}
-            >
-              {lineNum + 1}
-            </span>
-            {/* Line content */}
-            <span>
-              {line.segs.length === 0 || (line.segs.length === 1 && line.segs[0].text === '') ? (
-                ' '
-              ) : (
-                line.segs.map((seg, si) => (
-                  <span key={si} style={{ color: seg.color || '#d4d4d4' }}>
-                    {seg.text}
-                  </span>
-                ))
-              )}
-            </span>
-          </div>
-        ))}
-      </div>
-
-      {/* Variable chips strip */}
-      <div
-        style={{
-          padding: '8px 12px',
-          borderTop: '1px solid var(--border)',
-          background: 'var(--surface-2)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          flexWrap: 'wrap',
-        }}
-      >
-        <span style={{ fontSize: 10.5, color: 'var(--text-4)', marginRight: 4, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-          Variables
-        </span>
-        {TEMPLATE_VARS.map(v => (
-          <div
-            key={v}
-            className="af-chip"
-            style={{ color: '#fbbf24', borderColor: 'rgba(251,191,36,0.2)', background: 'rgba(251,191,36,0.08)' }}
-          >
-            {v}
-          </div>
-        ))}
-        <button className="af-btn" style={{ marginLeft: 'auto', fontSize: 11, height: 24, gap: 4 }}>
-          <Icon name="plus" size={10} />
-          Add variable
+        <div style={{ flex: 1 }} />
+        <button className="af-btn af-btn-ghost" style={{ height: 26, padding: '4px 7px' }} onClick={copyPrompt} title="Copy prompt">
+          <Icon name="copy" size={12} />
         </button>
       </div>
 
-      {/* VS Code-like status bar */}
-      <div
-        style={{
-          height: 22,
-          background: '#007acc',
-          display: 'flex',
-          alignItems: 'center',
-          padding: '0 12px',
-          gap: 12,
-          fontSize: 11,
-          color: 'rgba(255,255,255,0.85)',
-          fontFamily: 'var(--font-mono)',
-          flexShrink: 0,
-        }}
-      >
+      {/* Refine bar */}
+      {showRefineBar && (
+        <RefineBar
+          onRefine={handleRefine}
+          onClose={() => setShowRefineBar(false)}
+          loading={refining}
+        />
+      )}
+
+      {/* Monaco Editor */}
+      <div style={{ flex: '1 1 auto', overflow: 'hidden' }}>
+        <MonacoEditor
+          height="100%"
+          language="markdown"
+          theme="vs-dark"
+          value={systemPrompt}
+          onChange={v => onPromptChange(v ?? '')}
+          onMount={handleEditorMount}
+          options={{
+            fontSize: 13,
+            lineHeight: 20,
+            wordWrap: 'on',
+            minimap: { enabled: false },
+            scrollBeyondLastLine: false,
+            renderLineHighlight: 'gutter',
+            padding: { top: 12, bottom: 12 },
+            fontFamily: 'JetBrains Mono, ui-monospace, monospace',
+            tabSize: 2,
+          }}
+        />
+      </div>
+
+      {/* Status bar */}
+      <div style={{ height: 22, background: '#007acc', display: 'flex', alignItems: 'center', padding: '0 12px', gap: 12, fontSize: 11, color: 'rgba(255,255,255,0.85)', fontFamily: 'var(--font-mono)', flexShrink: 0 }}>
         <span>Markdown</span>
-        <span style={{ marginLeft: 'auto' }}>Ln 26, Col 1</span>
-        <span>{PROMPT_LINES.length} lines</span>
+        <span style={{ marginLeft: 'auto' }}>{systemPrompt.split('\n').length} lines</span>
         <span>UTF-8</span>
       </div>
+
+      {/* Generate drawer overlay */}
+      {showGenDrawer && (
+        <GenerateDrawer
+          nodeName={nodeName}
+          onClose={() => setShowGenDrawer(false)}
+          onResult={text => { onPromptChange(text); setShowGenDrawer(false) }}
+        />
+      )}
     </div>
   )
 }

@@ -12,7 +12,7 @@ import {
   type NodeMouseHandler,
   type OnConnect,
 } from '@xyflow/react'
-import { useFlowStore } from '@/store/useFlowStore'
+import { useFlowStore, NODE_DEFAULTS } from '@/store/useFlowStore'
 import { NODE_TYPES } from './constants'
 import FlowNode from './FlowNode'
 
@@ -43,6 +43,7 @@ function CanvasFlow({ onSelectNode }: CanvasProps) {
         type: 'flowNode',
         position,
         data: {
+          ...(NODE_DEFAULTS[type] ?? {}),
           type,
           name: NODE_TYPES[type].label,
           chips: [],
