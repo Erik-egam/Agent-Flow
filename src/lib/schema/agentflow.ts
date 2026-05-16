@@ -27,6 +27,7 @@ export const AgentFlowDesignSchema = z.object({
   metadata: z.object({
     createdAt: z.string(),
     updatedAt: z.string(),
+    thumbnail: z.string().optional(),
   }),
 })
 

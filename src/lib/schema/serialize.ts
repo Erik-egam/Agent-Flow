@@ -11,6 +11,7 @@ export function serialize(
   edges: Edge[],
   name: string,
   id?: string,
+  thumbnail?: string,
 ): AgentFlowDesign {
   return {
     version: '1.0',
@@ -38,6 +39,7 @@ export function serialize(
     metadata: {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
+      ...(thumbnail ? { thumbnail } : {}),
     },
   }
 }

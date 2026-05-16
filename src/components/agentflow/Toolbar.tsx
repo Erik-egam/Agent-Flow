@@ -7,11 +7,16 @@ interface ToolbarProps {
   dirty?: boolean
   saving?: boolean
   runState?: 'idle' | 'running'
+  chatActive?: boolean
+  theme?: 'dark' | 'light'
   onRun?: () => void
+  onChat?: () => void
   onSave?: () => void
   onExport?: () => void
   onImport?: () => void
   onSettings?: () => void
+  onShortcuts?: () => void
+  onThemeToggle?: () => void
   onNew?: () => void
   onNameChange?: (name: string) => void
   showRun?: boolean
@@ -22,11 +27,16 @@ export default function Toolbar({
   dirty = false,
   saving = false,
   runState = 'idle',
+  chatActive = false,
+  theme = 'dark',
   onRun,
+  onChat,
   onSave,
   onExport,
   onImport,
   onSettings,
+  onShortcuts,
+  onThemeToggle,
   onNew,
   onNameChange,
   showRun = true,
@@ -106,6 +116,26 @@ export default function Toolbar({
         {onExport && (
           <button className="af-btn af-btn-ghost" title="Export .agentflow.json" onClick={onExport}>
             <Icon name="download" size={13} />
+          </button>
+        )}
+        {onChat && (
+          <button
+            className="af-btn af-btn-ghost"
+            onClick={onChat}
+            title="AI Assistant"
+            style={chatActive ? { background: 'rgba(99,102,241,0.12)', color: 'var(--indigo-2)', borderColor: 'rgba(99,102,241,0.3)' } : undefined}
+          >
+            <Icon name="message-square" size={13} />
+          </button>
+        )}
+        {onThemeToggle && (
+          <button className="af-btn af-btn-ghost" onClick={onThemeToggle} title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
+            <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={13} />
+          </button>
+        )}
+        {onShortcuts && (
+          <button className="af-btn af-btn-ghost" onClick={onShortcuts} title="Keyboard shortcuts (?)">
+            <Icon name="help-circle" size={13} />
           </button>
         )}
         {onSettings && (

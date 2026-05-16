@@ -3,6 +3,7 @@ import {
   Node, Edge, NodeChange, EdgeChange, Connection,
   applyNodeChanges, applyEdgeChanges, addEdge,
 } from '@xyflow/react'
+import type { CanvasIssue } from '@/lib/validation/canvas'
 
 export interface FlowNodeData extends Record<string, unknown> {
   type: string
@@ -84,6 +85,9 @@ interface FlowStore {
   isDirty: boolean
   isSaving: boolean
 
+  // Validation (does not affect isDirty)
+  validationIssues: Record<string, CanvasIssue>
+
   onNodesChange: (changes: NodeChange[]) => void
   onEdgesChange: (changes: EdgeChange[]) => void
   onConnect: (connection: Connection) => void
@@ -96,6 +100,7 @@ interface FlowStore {
   setSaving: (saving: boolean) => void
   setNodeStatus: (id: string, status: FlowNodeData['status']) => void
   setActiveEdges: (ids: Set<string>) => void
+  setValidationIssues: (issues: CanvasIssue[]) => void
   undo: () => void
   redo: () => void
 }
@@ -113,6 +118,7 @@ export const useFlowStore = create<FlowStore>((set) => ({
   designName: 'Untitled design',
   isDirty: false,
   isSaving: false,
+  validationIssues: {},
 
   onNodesChange: (changes) => set(state => {
     const shouldRecord = changes.some(c =>
@@ -196,6 +202,12 @@ export const useFlowStore = create<FlowStore>((set) => ({
 
   setActiveEdges: (ids) => set(state => ({
     edges: state.edges.map(e => ({ ...e, animated: ids.has(e.id) })),
+  })),
+
+  setValidationIssues: (issues) => set(() => ({
+    validationIssues: Object.fromEntries(
+      issues.filter(i => i.nodeId !== '__canvas__').map(i => [i.nodeId, i])
+    ),
   })),
 
   undo: () => set(state => {

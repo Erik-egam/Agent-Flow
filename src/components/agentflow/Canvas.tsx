@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useMemo, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, type ReactNode } from 'react'
 import {
   ReactFlow,
   MiniMap,
@@ -16,8 +16,10 @@ import { useFlowStore, NODE_DEFAULTS } from '@/store/useFlowStore'
 import { NODE_TYPES } from './constants'
 import FlowNode from './FlowNode'
 import FlowEdge from './FlowEdge'
+import GroupNode from './GroupNode'
+import { validateCanvas } from '@/lib/validation/canvas'
 
-const nodeTypes = { flowNode: FlowNode }
+const nodeTypes = { flowNode: FlowNode, groupNode: GroupNode }
 const edgeTypes = { flowEdge: FlowEdge }
 
 interface CanvasProps {
@@ -28,6 +30,17 @@ interface CanvasProps {
 function CanvasFlow({ onSelectNode }: CanvasProps) {
   const store = useFlowStore()
   const { screenToFlowPosition } = useReactFlow()
+  const validationTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Debounced validation — avoids triggering on every keystroke in PropertiesPanel
+  useEffect(() => {
+    if (validationTimer.current) clearTimeout(validationTimer.current)
+    validationTimer.current = setTimeout(() => {
+      const issues = validateCanvas(store.nodes, store.edges)
+      store.setValidationIssues(issues)
+    }, 500)
+    return () => { if (validationTimer.current) clearTimeout(validationTimer.current) }
+  }, [store.nodes, store.edges]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const onDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -40,6 +53,18 @@ function CanvasFlow({ onSelectNode }: CanvasProps) {
       const type = e.dataTransfer.getData('application/agentflow')
       if (!type || !NODE_TYPES[type]) return
       const position = screenToFlowPosition({ x: e.clientX, y: e.clientY })
+
+      if (type === 'group') {
+        store.addNode({
+          id: `g-${Date.now()}`,
+          type: 'groupNode',
+          position,
+          style: { width: 280, height: 180, zIndex: -1 },
+          data: { label: 'Group', color: 'rgba(99,102,241,0.08)' },
+        })
+        return
+      }
+
       store.addNode({
         id: `n-${Date.now()}`,
         type: 'flowNode',

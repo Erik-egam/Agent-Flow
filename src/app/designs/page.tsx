@@ -6,6 +6,7 @@ import Toolbar from '@/components/agentflow/Toolbar'
 import Icon from '@/components/agentflow/Icon'
 import { useFlowStore } from '@/store/useFlowStore'
 import { deserialize, validateDesign } from '@/lib/schema/serialize'
+import { TEMPLATES } from '@/lib/templates'
 
 interface DesignSummary {
   id: string
@@ -96,6 +97,7 @@ export default function DesignsPage() {
   const [designs, setDesigns] = useState<DesignSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [view, setView] = useState<'designs' | 'templates'>('designs')
 
   const fetchDesigns = useCallback(async () => {
     try {
@@ -130,6 +132,16 @@ export default function DesignsPage() {
     router.push('/editor')
   }
 
+  function loadTemplate(id: string) {
+    const tpl = TEMPLATES.find(t => t.id === id)
+    if (!tpl) return
+    const validation = validateDesign(tpl.design)
+    if (!validation.success) return
+    const { nodes, edges } = deserialize(validation.data)
+    loadDesign(nodes, edges, tpl.id, tpl.design.name)
+    router.push('/editor')
+  }
+
   const filtered = designs.filter(d =>
     !search ||
     d.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -144,8 +156,13 @@ export default function DesignsPage() {
         <div className="af-panel" style={{ width: 200, flexShrink: 0 }}>
           <div className="af-panel-header">Library</div>
           <div style={{ padding: '8px 6px' }}>
-            {[{ icon: 'layers', label: 'All designs', count: designs.length }].map(item => (
-              <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 6, cursor: 'pointer', background: 'var(--surface-2)', color: 'var(--text)', fontSize: 12.5, marginBottom: 2 }}>
+            {[
+              { icon: 'layers',   label: 'All designs', key: 'designs',   count: designs.length },
+              { icon: 'package',  label: 'Templates',   key: 'templates', count: TEMPLATES.length },
+            ].map(item => (
+              <div key={item.key}
+                onClick={() => setView(item.key as 'designs' | 'templates')}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 6, cursor: 'pointer', background: view === item.key ? 'var(--surface-2)' : 'transparent', color: view === item.key ? 'var(--text)' : 'var(--text-3)', fontSize: 12.5, marginBottom: 2 }}>
                 <Icon name={item.icon} size={13} />
                 <span style={{ flex: 1 }}>{item.label}</span>
                 <span style={{ fontSize: 10.5, color: 'var(--text-2)', fontFamily: 'var(--font-mono)' }}>{item.count}</span>
@@ -156,46 +173,99 @@ export default function DesignsPage() {
 
         {/* Main */}
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px 14px' }}>
-            <div>
-              <h1 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)', marginBottom: 3 }}>All Designs</h1>
-              <p style={{ fontSize: 12.5, color: 'var(--text-3)' }}>{designs.length} agent system{designs.length !== 1 ? 's' : ''}</p>
-            </div>
-            <button className="af-btn af-btn-primary" style={{ height: 32, fontSize: 12.5 }} onClick={newDesign}>
-              <Icon name="plus" size={13} />New design
-            </button>
-          </div>
 
-          <div style={{ padding: '0 24px 16px' }}>
-            <div style={{ position: 'relative', maxWidth: 360 }}>
-              <div style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-4)', pointerEvents: 'none' }}>
-                <Icon name="search" size={13} />
+          {/* ── Templates view ── */}
+          {view === 'templates' && (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px 14px' }}>
+                <div>
+                  <h1 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)', marginBottom: 3 }}>Templates</h1>
+                  <p style={{ fontSize: 12.5, color: 'var(--text-3)' }}>Start from a pre-built multi-agent pattern</p>
+                </div>
               </div>
-              <input className="af-search" style={{ paddingLeft: 28, height: 32 }} placeholder="Search designs…" value={search} onChange={e => setSearch(e.target.value)} />
-            </div>
-          </div>
-
-          <div style={{ padding: '0 24px 24px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16, alignContent: 'start' }}>
-            {loading ? (
-              <div style={{ gridColumn: '1/-1', padding: 40, textAlign: 'center', color: 'var(--text-4)', fontSize: 13 }}>Loading designs…</div>
-            ) : filtered.length === 0 && search ? (
-              <div style={{ gridColumn: '1/-1', padding: 40, textAlign: 'center', color: 'var(--text-4)', fontSize: 13 }}>No designs matching "{search}"</div>
-            ) : (
-              filtered.map(d => (
-                <DesignCard key={d.id} design={d} onOpen={() => openDesign(d.id)} onDelete={() => deleteDesign(d.id)} />
-              ))
-            )}
-
-            {/* New design card */}
-            <div onClick={newDesign} style={{ border: '1.5px dashed var(--border-strong)', borderRadius: 10, minHeight: 200, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, cursor: 'pointer', color: 'var(--text-4)', transition: 'border-color 0.15s, color 0.15s' }}
-              onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--indigo)'; (e.currentTarget as HTMLDivElement).style.color = 'var(--indigo-2)' }}
-              onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border-strong)'; (e.currentTarget as HTMLDivElement).style.color = 'var(--text-4)' }}>
-              <div style={{ width: 36, height: 36, borderRadius: 8, border: '1.5px dashed currentColor', display: 'grid', placeItems: 'center' }}>
-                <Icon name="plus" size={18} />
+              <div style={{ padding: '0 24px 24px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16, alignContent: 'start' }}>
+                {TEMPLATES.map(tpl => (
+                  <div key={tpl.id}
+                    onClick={() => loadTemplate(tpl.id)}
+                    style={{ background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden', cursor: 'pointer', transition: 'border-color 0.15s, box-shadow 0.15s' }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border-strong)'; (e.currentTarget as HTMLDivElement).style.boxShadow = '0 8px 28px rgba(0,0,0,0.4)' }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLDivElement).style.boxShadow = 'none' }}
+                  >
+                    <div style={{ height: 90, background: 'var(--surface-2)', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+                      <div style={{ position: 'absolute', inset: 0, backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.04) 1px, transparent 1px)', backgroundSize: '16px 16px' }} />
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', zIndex: 1 }}>
+                        {tpl.design.nodes.slice(0, 5).map(n => (
+                          <div key={n.id} style={{ width: 28, height: 28, borderRadius: 6, background: 'var(--surface-3)', border: '1px solid var(--border-strong)', display: 'grid', placeItems: 'center', fontSize: 10, color: 'var(--text-3)' }}>
+                            {n.type.slice(0, 2).toUpperCase()}
+                          </div>
+                        ))}
+                        {tpl.design.nodes.length > 5 && (
+                          <span style={{ fontSize: 11, color: 'var(--text-4)' }}>+{tpl.design.nodes.length - 5}</span>
+                        )}
+                      </div>
+                    </div>
+                    <div style={{ padding: '12px 14px' }}>
+                      <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)', marginBottom: 4 }}>{tpl.name}</div>
+                      <p style={{ fontSize: 11.5, color: 'var(--text-3)', lineHeight: 1.45, marginBottom: 10 }}>{tpl.description}</p>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 7px', background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: 4, fontSize: 10.5, fontWeight: 600, color: 'var(--indigo-2)' }}>
+                          {tpl.pattern}
+                        </div>
+                        <span style={{ fontSize: 11, color: 'var(--text-4)' }}>{tpl.design.nodes.length} nodes</span>
+                        <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--indigo-2)' }}>Use template →</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
-              <span style={{ fontSize: 12.5, fontWeight: 500 }}>Create new design</span>
-            </div>
-          </div>
+            </>
+          )}
+
+          {/* ── Designs view ── */}
+          {view === 'designs' && (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px 14px' }}>
+                <div>
+                  <h1 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)', marginBottom: 3 }}>All Designs</h1>
+                  <p style={{ fontSize: 12.5, color: 'var(--text-3)' }}>{designs.length} agent system{designs.length !== 1 ? 's' : ''}</p>
+                </div>
+                <button className="af-btn af-btn-primary" style={{ height: 32, fontSize: 12.5 }} onClick={newDesign}>
+                  <Icon name="plus" size={13} />New design
+                </button>
+              </div>
+
+              <div style={{ padding: '0 24px 16px' }}>
+                <div style={{ position: 'relative', maxWidth: 360 }}>
+                  <div style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-4)', pointerEvents: 'none' }}>
+                    <Icon name="search" size={13} />
+                  </div>
+                  <input className="af-search" style={{ paddingLeft: 28, height: 32 }} placeholder="Search designs…" value={search} onChange={e => setSearch(e.target.value)} />
+                </div>
+              </div>
+
+              <div style={{ padding: '0 24px 24px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16, alignContent: 'start' }}>
+                {loading ? (
+                  <div style={{ gridColumn: '1/-1', padding: 40, textAlign: 'center', color: 'var(--text-4)', fontSize: 13 }}>Loading designs…</div>
+                ) : filtered.length === 0 && search ? (
+                  <div style={{ gridColumn: '1/-1', padding: 40, textAlign: 'center', color: 'var(--text-4)', fontSize: 13 }}>No designs matching "{search}"</div>
+                ) : (
+                  filtered.map(d => (
+                    <DesignCard key={d.id} design={d} onOpen={() => openDesign(d.id)} onDelete={() => deleteDesign(d.id)} />
+                  ))
+                )}
+
+                {/* New design card */}
+                <div onClick={newDesign} style={{ border: '1.5px dashed var(--border-strong)', borderRadius: 10, minHeight: 200, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, cursor: 'pointer', color: 'var(--text-4)', transition: 'border-color 0.15s, color 0.15s' }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--indigo)'; (e.currentTarget as HTMLDivElement).style.color = 'var(--indigo-2)' }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border-strong)'; (e.currentTarget as HTMLDivElement).style.color = 'var(--text-4)' }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 8, border: '1.5px dashed currentColor', display: 'grid', placeItems: 'center' }}>
+                    <Icon name="plus" size={18} />
+                  </div>
+                  <span style={{ fontSize: 12.5, fontWeight: 500 }}>Create new design</span>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

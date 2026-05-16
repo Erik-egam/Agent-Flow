@@ -10,6 +10,7 @@ export const NODE_TYPES: Record<string, { label: string; icon: string; color: st
   state:        { label: 'State Node',   icon: 'layers',                  color: 'var(--c-state)' },
   subgraph:     { label: 'Subgraph',     icon: 'package',                 color: 'var(--c-subgraph)' },
   note:         { label: 'Note',         icon: 'sticky-note',             color: 'var(--c-note)' },
+  group:        { label: 'Group',        icon: 'square-dashed',           color: 'rgba(99,102,241,0.15)' },
 }
 
 export const PALETTE_CATS = [
@@ -18,7 +19,7 @@ export const PALETTE_CATS = [
   { id: 'flow',   label: 'Control Flow', items: ['conditional', 'human'] },
   { id: 'mem',    label: 'Memory',       items: ['memory'] },
   { id: 'orch',   label: 'Orchestration',items: ['orchestrator', 'state'] },
-  { id: 'struct', label: 'Structure',    items: ['subgraph', 'note'] },
+  { id: 'struct', label: 'Structure',    items: ['subgraph', 'note', 'group'] },
 ]
 
 export interface SampleNode {
