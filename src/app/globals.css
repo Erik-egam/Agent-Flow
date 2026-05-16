@@ -242,3 +242,64 @@ html, body { height: 100%; background: var(--bg); color: var(--text); }
 .af-kbd { display: inline-block; padding: 1px 5px; background: var(--surface-3); border: 1px solid var(--border-strong); border-bottom-width: 2px; border-radius: 3px; font-family: var(--font-mono); font-size: 10px; color: var(--text-2); }
 @keyframes af-blink { to { opacity: 0; } }
 @keyframes af-spin { to { transform: rotate(360deg); } }
+
+/* ── React Flow dark theme overrides ── */
+.react-flow { background: var(--bg); }
+.react-flow__renderer { outline: none; }
+
+/* Edges */
+.react-flow__edge-path { stroke: var(--text-4); stroke-width: 1.5; }
+.react-flow__edge.selected .react-flow__edge-path,
+.react-flow__edge:hover .react-flow__edge-path { stroke: var(--indigo); stroke-width: 2; }
+.react-flow__edge.animated .react-flow__edge-path {
+  stroke: var(--indigo); stroke-dasharray: 6 4;
+  animation: af-edge-flow 0.8s linear infinite;
+}
+.react-flow__edge-label { fill: var(--text-3); font-size: 10px; font-family: var(--font-mono); }
+.react-flow__arrowhead { fill: var(--text-4); }
+
+/* Handles */
+.react-flow__handle {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--surface-3); border: 2px solid var(--node-color, var(--indigo));
+  min-width: 10px; min-height: 10px;
+}
+.react-flow__handle-left { left: -5px; }
+.react-flow__handle-right { right: -5px; }
+.react-flow__handle.connectingfrom,
+.react-flow__handle.connectingto,
+.react-flow__handle:hover {
+  background: var(--indigo-dim); border-color: var(--indigo);
+}
+
+/* Connection line while dragging */
+.react-flow__connection-path { stroke: var(--indigo); stroke-width: 1.5; }
+
+/* Controls */
+.react-flow__controls {
+  background: var(--surface-2); border: 1px solid var(--border-strong);
+  border-radius: 8px; box-shadow: none; overflow: hidden;
+}
+.react-flow__controls-button {
+  background: transparent; border: none; border-bottom: 1px solid var(--border);
+  color: var(--text-2); width: 28px; height: 28px; padding: 0;
+  display: grid; place-items: center;
+}
+.react-flow__controls-button:last-child { border-bottom: none; }
+.react-flow__controls-button:hover { background: var(--surface-3); }
+.react-flow__controls-button svg { fill: var(--text-2); width: 13px; height: 13px; }
+.react-flow__controls-button:hover svg { fill: var(--text); }
+
+/* MiniMap */
+.react-flow__minimap { border-radius: 8px; border: 1px solid var(--border-strong); }
+.react-flow__minimap-mask { fill: rgba(10,10,10,0.55); }
+
+/* Selection box */
+.react-flow__selection { background: var(--indigo-dim); border: 1px solid var(--indigo); border-radius: 4px; }
+
+/* Node selected ring is handled by .af-node.is-selected */
+.react-flow__node { cursor: default; }
+.react-flow__node.selected .af-node { box-shadow: 0 0 0 1.5px var(--indigo), 0 8px 28px rgba(0,0,0,0.5), 0 0 24px rgba(99,102,241,0.18); }
+
+/* af-rf-handle inherits from react-flow__handle + node-color */
+.af-rf-handle { border-color: var(--node-color, var(--indigo)); }

@@ -1,63 +1,83 @@
 'use client'
-import { useState } from 'react'
+
+import { useEffect, useState } from 'react'
 import Toolbar from '@/components/agentflow/Toolbar'
 import NodePalette from '@/components/agentflow/NodePalette'
 import Canvas from '@/components/agentflow/Canvas'
 import PropertiesPanel from '@/components/agentflow/PropertiesPanel'
 import ExecutionDebugger from '@/components/agentflow/ExecutionDebugger'
-import { SAMPLE_NODES, SAMPLE_EDGES } from '@/components/agentflow/constants'
+import { useFlowStore, type FlowNodeData } from '@/store/useFlowStore'
 
 export default function EditorPage() {
-  const [selectedId, setSelectedId] = useState('n2')
+  const { nodes, undo, redo, setNodeStatus, setActiveEdges } = useFlowStore()
+
+  const [selectedId, setSelectedId] = useState<string | null>(null)
   const [showDebugger, setShowDebugger] = useState(false)
   const [runState, setRunState] = useState<'idle' | 'running'>('idle')
   const [activePromptTab, setActivePromptTab] = useState<'config' | 'prompt' | 'conn'>('config')
   const [showGenerateDrawer, setShowGenerateDrawer] = useState(false)
 
-  const selectedNode = SAMPLE_NODES.find(n => n.id === selectedId)
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      const mod = e.ctrlKey || e.metaKey
+      if (!mod) return
+      if (e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo() }
+      else if (e.key === 'y' || (e.key === 'z' && e.shiftKey)) { e.preventDefault(); redo() }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [undo, redo])
+
+  function toggleRun() {
+    const next = runState === 'idle' ? 'running' : 'idle'
+    setRunState(next)
+    setShowDebugger(next === 'running')
+    if (next === 'running') {
+      setNodeStatus('n1', 'ok')
+      setNodeStatus('n2', 'ok')
+      setNodeStatus('n3', 'run')
+      setNodeStatus('n4', 'idle')
+      setNodeStatus('n5', 'ok')
+      setNodeStatus('n6', 'idle')
+      setNodeStatus('n7', 'idle')
+      setActiveEdges(new Set(['e1', 'e2', 'e4']))
+    } else {
+      ;['n1', 'n2', 'n3', 'n4', 'n5', 'n6', 'n7'].forEach(id => setNodeStatus(id, 'idle'))
+      setActiveEdges(new Set())
+    }
+  }
+
+  function stopRun() {
+    setShowDebugger(false)
+    setRunState('idle')
+    ;['n1', 'n2', 'n3', 'n4', 'n5', 'n6', 'n7'].forEach(id => setNodeStatus(id, 'idle'))
+    setActiveEdges(new Set())
+  }
+
+  const selectedNode = selectedId ? nodes.find(n => n.id === selectedId) : null
+  const selectedNodeData = selectedNode
+    ? {
+        id: selectedNode.id,
+        type: (selectedNode.data as FlowNodeData).type,
+        name: (selectedNode.data as FlowNodeData).name,
+        chips: (selectedNode.data as FlowNodeData).chips,
+        x: selectedNode.position.x,
+        y: selectedNode.position.y,
+      }
+    : null
 
   return (
     <div className="af-screen">
-      <Toolbar
-        name="Science research pipeline"
-        runState={runState}
-        onRun={() => {
-          setRunState(r => (r === 'idle' ? 'running' : 'idle'))
-          setShowDebugger(s => !s)
-        }}
-      />
+      <Toolbar name="Science research pipeline" runState={runState} onRun={toggleRun} />
       <div className="af-body">
         <NodePalette />
-        <Canvas
-          nodes={SAMPLE_NODES}
-          edges={SAMPLE_EDGES}
-          selectedId={selectedId}
-          onSelectNode={setSelectedId}
-          nodeStatuses={
-            runState === 'running'
-              ? { n1: 'ok', n2: 'ok', n3: 'run', n4: 'idle', n5: 'ok', n6: 'idle', n7: 'idle' }
-              : {}
-          }
-          activeEdges={
-            runState === 'running'
-              ? new Set(['n1->n2', 'n2->n3', 'n3->n5'])
-              : new Set()
-          }
-          showDebugger={showDebugger}
-        >
-          {showDebugger && (
-            <ExecutionDebugger
-              onClose={() => {
-                setShowDebugger(false)
-                setRunState('idle')
-              }}
-            />
-          )}
+        <Canvas onSelectNode={setSelectedId}>
+          {showDebugger && <ExecutionDebugger onClose={stopRun} />}
         </Canvas>
-        {selectedNode && (
+        {selectedNodeData && (
           <PropertiesPanel
-            node={selectedNode}
-            onClose={() => setSelectedId('')}
+            node={selectedNodeData}
+            onClose={() => setSelectedId(null)}
             activeTab={activePromptTab}
             onTabChange={setActivePromptTab}
             onShowGenerateDrawer={() => setShowGenerateDrawer(true)}

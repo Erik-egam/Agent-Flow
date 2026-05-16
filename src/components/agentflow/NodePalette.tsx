@@ -62,7 +62,15 @@ export default function NodePalette({ width = 232 }: NodePaletteProps) {
                   const nodeType = NODE_TYPES[typeKey]
                   if (!nodeType) return null
                   return (
-                    <div key={typeKey} className="af-pal-item" draggable>
+                    <div
+                      key={typeKey}
+                      className="af-pal-item"
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData('application/agentflow', typeKey)
+                        e.dataTransfer.effectAllowed = 'move'
+                      }}
+                    >
                       <div
                         className="af-pal-icon"
                         style={{
